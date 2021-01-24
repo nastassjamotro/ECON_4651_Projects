@@ -1,0 +1,6 @@
+*Set directory for data
+cd "/Users/nastassjamotro/Documents/COLLEGE/Econometrics"
+
+*Turn csv files into dta files
+foreach file in mask-use-by-county us-counties {
+}
