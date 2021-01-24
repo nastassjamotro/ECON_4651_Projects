@@ -3,4 +3,72 @@ cd "/Users/nastassjamotro/Documents/COLLEGE/Econometrics"
 
 *Turn csv files into dta files
 foreach file in mask-use-by-county us-counties {
+  import delimited using `file'.csv, clear
+  save `file'
 }
+
+*Merge the datasets
+cd "/Users/nastassjamotro/Documents/COLLEGE/Econometrics"
+use mask-use-by-county.dta, clear
+rename countyfp fips
+sort fips
+save mask-use-by-county.dta, replace
+
+use us-counties.dta, clear
+sort fips
+merge m:1 fips using maks-use-by-county.dta
+
+*Delete out missing variables
+drop if _merge == 1
+drop if _merge == 2
+tab _merge //makes sure there's nothing left that was unmatched
+drop _merge
+save us-counties-mask.dta, replace
+
+*Import election data
+cd "/Users/nastassjamotro/Documents/COLLEGE/Econometrics"
+foreach file in election_2016 {
+  import delimited using `file'.csv, clear
+  save `file'
+}
+
+*Merging election data
+cd "/Users/nastassjamotro/Documents/COLLEGE/Econometrics"
+save election_2016, replace
+use us-counties-mask, clear
+use election_2016, clear
+merge m:1 fips using election_2016
+drop if _merge == 1
+drop if _merge == 2
+tab _merge
+drop _merge
+save us-counties-mask-election.dta, replace
+
+*Start creating variables and seeing correlations
+generate deathrate = (deaths/population)
+generate caserate = (cases/population)
+correlate caserate never rarely sometimes frequently always
+correlate deathrate never rarely sometimes frequently always
+
+generate PercentageTrump = (trump/totalvotes) * 100
+generate PercentageClinton = (clinton/totalvotes) * 100
+generate trump_margin = PercentageTrump - PercentageClinton
+
+*Graphs and Correlations
+twoway (scatter deathrate always) (lfit deathrate always)
+twoway (scatter caserate always) (lift caserate always)
+correlate (trump_margin deathrate)
+correlate (trump_margin caserate)
+correlate (trump_margin always)
+
+*Create T-test
+generate mask_use = (never * -2) + (rarely * -1) + (sometimes * 0) + (frequently * 1) + (always * 2)
+collapse population trump_margin caserate deathrate never rarely sometimes frequently always mask_use, by (fips county state)
+generate maskers = mask_use >= 1.296
+generate antimaskers = mask_use <= 0.701
+drop if maskers == 0 & antimaskers == 0
+sum trump_margin if maksers == 1, detail
+sum trump_margin if antimaskers == 1, detail
+ttest trump_margin, by (antimaskers)
+
+
