@@ -1,0 +1,92 @@
+*Import state-fips, first to clean it up
+import delimited using "/Users/nastassjamotro/Documents/COLLEGE/FALL 2020/ECON 4651/Group Assignment 2"
+use state-fips.dta
+duplicates drop state, force // removing any duplicate states to get a clean state-fips dataset
+drop if fips > 57
+
+*Set directory for datasets
+cd "/Users/nastassjamotro/Documents/COLLEGE/FALL 2020/ECON 4651/Group Assignment 2"
+use police_employment.dta, clear
+rename state_postal_abbr abbr
+sort abbr
+save police_employment.dta, replace
+
+use police_employment.dta, clear
+sort abbr
+merge m:m abbr using state-fips.dta
+
+*Delete Unmatched Data
+drop if _merge == 1
+drop if _merge == 2
+tab _merge //make sure all unmatched are gone
+drop _merge
+svae police-employment-fips.dta, replace
+
+*Import second dataset
+cd "/Users/nastassjamotro/Documents/COLLEGE/FALL 2020/ECON 4651/Group Assignment 2"
+foreach file in hate_crime {
+  import delimited using `file'.csv, clear
+  save `file'
+}
+
+*Merging hate_crime data
+cd "/Users/nastassjamotro/Documents/COLLEGE/FALL 2020/ECON 4651/Group Assignment 2"
+use hate_crime.dta, clear
+rename state_abbr abbr
+sort abbr
+save hate_crime.dta, replace
+
+use police_employment-fips.dta, clear
+use hate_crime.dta, clear
+merge m:m abbr using hate_crime.dta
+
+*Delete unmatched data
+drop if _merge == 1
+drop if _merge == 2
+tab _merge
+drop _merge
+save hate-crime-police-fips.dta, replace
+
+*Cleaning data (missing data and irrelevant data)
+drop incident_id
+drop ori //unvaluabe variables dropped
+
+mdesc //search for variables with missing data
+drop if officer_count == .
+drop if officer_rate_per_1000 == .
+drop if civilian_count == .
+drop if civilian_rate_per_1000 == .
+drop if adult_viticm_count == .
+drop if adult_offender_count == .
+drop if juvenile_offender_count == .
+drop if offender_ethnicity == ""
+drop if offender_race == ""
+
+*Regressions
+reg officer_count population // R^2 = 0.9729
+reg officer_count total_offender_count // R^2 = 0.003 but it's insignificant
+reg hate_crime_frequency population
+
+*T-tests
+generate rare_offender_count = total_offender_count <= 9
+generate frequent_offender_count = total_offender count >= 10
+sum officer_count if rare_offender_count == 1, detail
+sum officer_count if frequent_offender_count == 1, detail
+ttest officer_count, by(rare_offender_count)
+ttest officer_count, by (frequent_offender_count)
+ttest population, by (rare_offender_count)
+ttest population, by (frequent_offender_count)
+
+*Generating new variables for graphical use
+generate hate_crime_frequency = data_year/total_offender_count
+generate police_per_capita = officer_count/population
+generate hate_crime_rate = total_offender_count/population
+
+*Graphs
+twoway (scatter officer_count population) (lfit officer_count population)
+twoway (scatter officer_count total_offender_count) (lfit officer_count total_offender_count)
+twoway (scatter population hate_crime_frequency) (lfit population hate_crime_frequency)
+twoway (scatter hate_crime_rate data_year) (lift hate_crime_rate data_year)
+twoway (scatter hate_crime_rate population) (lfit hate_crime_rate population)
+twoway (scatter police_per_capita data_year) (lfit police_per_capita data_year)
+
