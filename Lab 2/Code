@@ -1,0 +1,76 @@
+*Import Dta
+cd "/Users/nastassjamotro/Documents/COLLEGE/FALL 2020/ECON 4651/Lab 2"
+import delimited "japan.csv", encoding(UTF-8) clear
+
+*Clean Data
+split(endtime), p(" ")
+gen date = date(endtime1, "DMY", 2050)
+order date
+format date %td
+drop endtime*
+
+*Keep Few Variables
+keep date gender region i2_health i3_health i7a_health i6_health i12_health_1
+
+ren i2_health num_contact
+label var num_contact "# ppl outside HH within 6ft"
+
+ren i7a_health num_leave_house
+label var num_leave_house "# times leave house yesterday"
+
+ren i3_health covid_test
+
+gen positivetest = covid_test == "Yes, and I tested positive"
+gen negativetest = covid_test == "Yes, and I tested negative"
+gen unknowntest = covid_test == "Yes, and I have not received my results from the test yet"
+gen notest = covid_test == "No, I have not"
+
+label var i6_health "social distance 7 days after symptoms?"
+encode i6_health, gen(covid_sd)
+drop i6_health
+
+encode i12_health_1, gen(mask)
+gen yes_mask = inlist(i12_health_1, "Always", "Frequently") == 1
+gen no_mask = inlist(i12_health_1, "Somtimes", "Rarely", "Not at all") == 1
+
+*Figures
+gen week = week(date)
+
+preserve
+  collapse (mean) *mask *test, by(gender week)
+  twoway (line yes_mask week, sort) if gender == "Male"
+restore
+
+*Manual Functions
+cap program drop mean_diff
+program mean_diff, rclass
+  args v1 v2
+  quietly sum `v1' if `v2' == 0, detail
+  local pos_med = r(mean)
+  quietly sum `v1' if `v2' == 1, detail
+  local neg_med = r(mean)
+  return scalar meandiff = `pos_med' - `neg_med'
+  display as txt "median difference = " `post_med' " - " `neg_med' " - " `pos_med' - `neg_med'
+end
+
+mean_diff yes_mask positivetest
+mean_diff positivetest yes_mask
+mean_diff positivetest negativetest
+ret lis
+
+*Regressions
+regress yes_mask positivetest
+estimates store model1
+
+regress yes_mask positivetest negativetest num_contact num_leave_house
+estimates store model2
+estimates table model1 model2, b(%10.3f) star stats(N r2 r2_a) varlabel allbaselevels
+putdocx begin
+putdocx table tbl1 = etable
+putdocx save mydoc, replace
+
+*Macros
+ereturn list
+mat list e(b)
+mat list e(V)
+display _b[positivetest] + _b[negativetest] + _b[num_contact]*10
