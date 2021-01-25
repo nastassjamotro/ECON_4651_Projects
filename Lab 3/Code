@@ -1,0 +1,115 @@
+cd "/Users/nastassjamotro/Documents/COLLEGE/FALL 2020/ECON 4641/Lab 3"
+
+*Install needed ado files
+ssc install shp2dta
+ssc install vincenty
+
+*Prep SNAP data
+import delimited "/Users/nastassjamotro/Documents/COLLEGE/FALL 2020/ECON 4651/Lab 3/SNAP_Store_Locations.csv", encoding(UTF-8) clear
+keep if state == "NY"
+keep if inlist(county, "NEW YORK", "KINGS", "QUEENS", "RICHMOND", "BRONX") == 1
+replace store_name = lower(store_name)
+keep if regexm(store_name, "target")
+keep x y
+save ny_target, replace
+
+*Airbnb
+import delimited "AB_NYC_2019.csv", clear
+drop if missing(availability_365) == 1 // drop few cases that didn't import correctly
+destring id, replace
+recode price(0/100 = 1) (101/500 = 2) (501/. = 3), gen(pricerecode)
+bys pricerecode: sum pricerecord
+
+*Practice RegExp using name
+replace name = lower(name)
+gen cozy = regexm(name, "cozy") == 1
+list name if cozy == 1
+gen cozy2 = regexs(1) if regexm(name, "cozy(.*)$") //scrapes everything after cozy
+
+gen hip = regexm(name, "hip") == 1
+
+gen space = regexs(1) if regexm(name, " ([a-z]*spac[a-z]* ")
+tab space
+
+gen central_park = regexm(name, "central park") == 1
+list name if central_park == 1
+
+*Splitting
+split name, p(,)
+drop name?
+
+compress
+tempfile temp_airbnb
+save `airbnb'
+
+*Determining closest target
+use id lat lon using `temp_airbnb', clear
+cross using ny_target //compare every airbnb to every target
+
+*Find closest target for each airbnb
+vincenty lat lon y x, v(d)
+gcollapse (min) d_target = d, by(id)
+tempfile d_target
+save `d_target'
+
+use `temp_airbnb', clear
+merge 1:1 id using `d_target', nogen keep (1 3)
+
+sum d_target, d
+recode d_target (0/0.5 = 1) (0.51/5 = 2) (5.01/. = 3), gen(d_target_recode)
+
+save airbnb_nyc, replace
+
+*Get Census Tract Shape Files
+local ny_fips = 36
+copy ftp://ftp2.census/gov/geo/tiger/TIGER2016/t1_2016_`ny_fips'_tract.zip t1_2016_`ny_fips'_tract.zip, replace
+unzipfile t1_2016_`ny_fips'_tract.zip
+shp2dta using t1_2016_`ny_fips'_tract, data(d36) coord(c `ny_fips') replace
+
+use c36, clear
+merge m:1 _ID using d36
+keep if inlist(COUNTYFP,"061","047","085","081") == 1
+append using airbnb_nyc
+
+*By Prices
+twoway area _Y _X if ALAND > 0, lwidth(vthin) nodropbase cmiss(n) fi(25) col(gray) ///
+		|| sc latitude longtidue if pricerecode == 1, mcolor(blue) msize(vtiny) msymbol(smcircle) ///
+		|| sc latitude longtidue if pricerecode == 2, mcolor(orange_red%15) msize(vtiny) msymbol(smcircle) ///
+		|| sc latitude longtidue if pricerecode == 3, mcolor(maroon%55) msize(vtiny) msymbol(smcircle) ///
+		leg(off) ysc(off) yla(,nogrid) xsc(off) graphr(fc(white))
+		
+*Central Park
+twoway area _Y _X if ALAND > 0, lwidth(vthin) nodropbase cmiss(n) fi(25) col(gray) ///
+		|| sc latitude longtidue if pricerecode == 1 & central_park == 1, mcolor(blue) msize(vtiny) msymbol(smcircle) ///
+		|| sc latitude longtidue if pricerecode == 2 & central_park == 1, mcolor(orange_red%15) msize(vtiny) msymbol(smcircle) ///
+		|| sc latitude longtidue if pricerecode == 3 & central_park == 1, mcolor(maroon%55) msize(vtiny) msymbol(smcircle) ///
+		leg(off) ysc(off) yla(,nogrid) xsc(off) graphr(fc(white))
+		
+*Hip
+twoway area _Y _X if ALAND > 0, lwidth(vthin) nodropbase cmiss(n) fi(25) col(gray) ///
+		|| sc latitude longtidue if pricerecode == 1 & hip == 1, mcolor(blue) msize(vtiny) msymbol(smcircle) ///
+		|| sc latitude longtidue if pricerecode == 2 & hip == 1, mcolor(orange_red%15) msize(vtiny) msymbol(smcircle) ///
+		|| sc latitude longtidue if pricerecode == 3 & hip == 1, mcolor(maroon%55) msize(vtiny) msymbol(smcircle) ///
+		leg(off) ysc(off) yla(,nogrid) xsc(off) graphr(fc(white))
+
+*Host names
+local name = "Nastassja"
+twoway area _Y _X if ALAND > 0, lwidth(vthin) nodropbase cmiss(n) fi(25) col(gray) ///
+		|| sc latitude longtidue if pricerecode == 1 & host_name == "`name'", mcolor(blue) msize(vtiny) msymbol(smcircle) ///
+		|| sc latitude longtidue if pricerecode == 2 & host_name == "`name'", mcolor(orange_red%15) msize(vtiny) msymbol(smcircle) ///
+		|| sc latitude longtidue if pricerecode == 3 & host_name == "`name'", mcolor(maroon%55) msize(vtiny) msymbol(smcircle) ///
+		leg(off) ysc(off) yla(,nogrid) xsc(off) graphr(fc(white))
+		
+*Distance to target
+append using ny_target
+twoway area _Y _X if ALAND > 0, lwidth(vthin) nodropbase cmiss(n) fi(25) col(gray) ///
+		|| sc latitude longtidue if d_target_recode == 1, mcolor(blue) msize(vtiny) msymbol(smcircle) ///
+		|| sc latitude longtidue if d_target_recode == 2, mcolor(maroon%55) msize(vtiny) msymbol(smcircle) ///
+		|| sc latitude longtidue if d_target_recode == 3, mcolor(forest_green%55) msize(vtiny) msymbol(smcircle) ///
+		|| sc y x, mcolor(purple) msize(large) msymbol(x) ///
+		leg(off) ysc(off) yla(,nogrid) xsc(off) graphr(fc(white))
+		
+*Run few regressions
+egen nFE = group(neighborhood)
+egen rFE = group(room_type)
+reg price d_target i.nFE i.rFE i.minimum.nights
