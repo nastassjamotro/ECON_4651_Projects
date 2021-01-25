@@ -1,0 +1,97 @@
+* Looking at Earnings First
+
+*Import Data
+cd "/Users/nastassjamotro/Documents/COLLEGE/FALL 2020/ECON 4651/Group Assignment 3"
+import delimited "earnings.csv", encoding(UTF-8) clear
+
+*Summary Stats
+mean earnings_female_mean
+mean earnings_male_mean
+
+preserve
+  keep if inst_name == "University of Utah"
+  mean earnings_female_mean
+  mean earnings_male_mean
+restore
+ 
+*Graphs
+graph hbar (mean) earnings_female_mean, over(inst_name)
+graph hbar (mean) earnings_male_mean, over (inst_name)
+
+*Comparison Stuff
+generate earnings_difference = earnings_female_mean - earnings_male_mean
+drop if earnings_difference == .
+tab inst_name, generate(college) //creates dummy variable
+sort inst_name
+rename college1 ArizonaStateUniversityMainCampus
+rename college2 ArizonaStateUniversity
+rename college3 ASUTempCampus
+rename college4 ASUTempe
+rename college5 UNIVERSITYOFARIZONA
+rename college6 UNIVERSITYOFCALIFORIALOSANGELES
+rename college7 UNIVERSITYOFCOLORADOATBOULDER
+rename college8 UNIVERSITYOFSOUTHERNCALIFORNIA
+rename college9 UNIVERSITYOFUTAH
+rename college10 UniversityofArizona
+rename college11 UniversityofCaliforniaLosAngeles
+rename college12 UniversityofColoradoBoulder
+rename college13 UniversityofColoradoatBoulder
+rename college14 UniversityofSouthernCalifornia
+rename college15 UniversityofUtah
+regress earnings_difference ArizonaStateUniversityMainCampus ArizonaStateUniversity ASUTempCampus ASUTempe UNIVERSITYOFARIZONA UNIVERSITYOFCALIFORIALOSANGELES UNIVERSITYOFCOLORADOATBOULDER UNIVERSITYOFSOUTHERNCALIFORNIA UNIVERSITYOFUTAH UniversityofArizona UniversityofCaliforniaLosAngeles UniversityofColoradoBoulder UniversityofColoradoatBoulder UniversityofSouthernCalifornia UniversityofUtah
+outreg2 using colleges.doc, replace ctitle(Difference in Earnings)
+
+
+** Male To Female Ratio
+drop if sex == "Total"
+sort unitid
+by unitid: egen nummale = sum(number_enrolled_total) if sex == "Male"
+by unitid: egen numfemale = sum(number_enrolled_total) if sex == "Female"
+sort unitid sex
+duplicates drop unitid sex, force
+replace nummale = nummale[_n+1] if nummale == . & unitid == unitid[_n+1]
+replace numfemale = numfemale[_n+1] if numfemale == . & unitid == unitid[_n+1]
+gen male2female = nummale/numfemale
+order male2female
+sort unitid
+duplicates drop unitid, force
+
+** Repayments
+*Import Data
+cd "/Users/nastassjamotro/Documents/COLLEGE/FALL 2020/ECON 4651/Group Assignment 3"
+import delimited "repay_rate.csv", encoding(UTF-8) clear
+
+*Regresstions of repayment rates
+reg repay_rate_female years_since_entering_repay year
+outreg2 using repaymentrate.doc, replace ctitle(All Female Repay Rates)
+reg repay_rate_male years_since_entering_repay year
+outreg2 using repaymentrate.doc, append ctitle(All Male Repay Rates)
+
+preserve
+  keep if inst_name == "University of Utah"
+  reg repay_rate_female years_since_entering_repay year
+  outreg2 using repaymentrate.doc, append ctitle(U Female Repay Rates)
+  reg repay_rate_female years_since_entering_repay year
+  outreg 2 using repaymentrate.doc, append ctitle(U Male Repay Rates)
+restore
+
+//without year control
+reg repay_rate_female years_since_entering_repay 
+outreg2 using repay.doc, replace ctitle(All Female Repay Rates)
+reg repay_rate_male years_since_entering_repay 
+outreg2 using repay.doc, append ctitle(All Male Repay Rates)
+
+preserve
+  keep if inst_name == "University of Utah"
+  reg repay_rate_female years_since_entering_repay 
+  outreg2 using repay.doc, append ctitle(U Female Repay Rates)
+  reg repay_rate_female years_since_entering_repay 
+  outreg 2 using repay.doc, append ctitle(U Male Repay Rates)
+restore
+
+** Completion Rate
+sort unitid sex
+by unitid sex: egen avgcompletion = mean(completion_rate_150pct)
+duplicates drop unitid sex, force
+keep sex unitid inst_name avgcompletion
+drop if sex == "Total"
