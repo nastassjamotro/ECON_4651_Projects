@@ -1,0 +1,64 @@
+*Setting directory for datasets
+cd "/Users/nastassjamotro/Documents/COLLEGE/FALL 2020/ECON 4651/Group Assignment 4"
+
+*Turn into dta files
+foreach file in annualAQI2017 annualAQI2018 annualAQI2019 {
+  import delimited using `file'.csv, clear
+  save `file'
+}
+
+*Append all of the files together
+append using annualAQI2017.dta
+append using annualAQI2018.dta
+//append using annualAQI2019.dta
+sort year
+
+*Cleaning Data
+nmissing //checks for missing data
+npresent //checks every variable has same amount of rows/data
+
+*Creating Dummy Variables
+generate post = (year>2017)
+tab state, generate(treat)
+keep treat5
+rename treat5 treat
+generate treatXpost = treat * post
+
+*Table of Means
+mean medianaqi if treat == 1 & post == 0 //treated prior to policy
+mean medianaqi if treat == 1 & post == 1 //treated after policy
+mean medianaqi if treat == 0 & post == 0 //untreated prior to policy
+mean medianaqi if treat == 0 & post == 1 //treated prior to policy
+
+*Graphs
+graph bar (mean) medianaqi, over(year)
+
+*Regressions
+reg medianaqi treat post treatXpost
+outreg2 using differences.doc, replace ctitle(difference-in-differences estimator)
+
+*Maptile Stuff
+*Prep maptile
+ssc install maptile, replace
+ssc install spmap, replace
+
+*Get County Shapefiles
+maptile_install using "http://files.michaelstepner.com/geo_county2014.zip"
+maptile_install using "http://files.michaelstepner.com/geo_county1990.zip"
+maptile_install using "http://files.michaelstepner.com/geo_state.zip"
+maptile_install using "http://files.michaelstepner.com/geo_can_prov.zip"
+rename state statename
+
+*2017-2018 by state
+preserve
+  keep if year != 2019
+  duplicates drop statename, force
+  maptile medianaqi, geo(state) geoid(statename)
+restore
+
+*2018-2019 by state
+preserve
+  keep if year != 2017
+  duplicates drop statename, force
+  maptile medianaqi, geo(state) geoid(statename)
+restore
